@@ -1,10 +1,16 @@
-import { useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { AssistantRuntimeProvider, useLocalRuntime } from "@assistant-ui/react";
-import { mockAdapter } from "./lib/mock-adapter";
 import { ChatSidebar } from "./components/chat-sidebar";
 import { Thread } from "./components/assistant/thread";
+import { OllamaSettings } from "./components/ollama-settings";
+import { createOllamaAdapter, type OllamaConfig } from "./lib/ollama-adapter";
 import { Sun, Moon, PanelLeft } from "lucide-react";
 import { cn } from "@workspace/ui/lib/utils";
+
+const DEFAULT_CONFIG: OllamaConfig = {
+  baseUrl: "http://localhost:11434",
+  model: "llama3.2",
+};
 
 function useTheme() {
   const [dark, setDark] = useState(() =>
@@ -18,10 +24,24 @@ function useTheme() {
 }
 
 function ChatApp() {
-  const runtime = useLocalRuntime(mockAdapter);
   const [activeChat, setActiveChat] = useState<string>("1");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const { dark, toggle } = useTheme();
+
+  // Ollama config — stored in a ref so the adapter always reads the latest
+  // value without the runtime needing to be recreated.
+  const [config, setConfig] = useState<OllamaConfig>(DEFAULT_CONFIG);
+  const configRef = useRef(config);
+  configRef.current = config;
+
+  const adapter = useMemo(
+    () => createOllamaAdapter(() => configRef.current),
+    // adapter is created once; it reads config via the ref
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
+
+  const runtime = useLocalRuntime(adapter);
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
@@ -59,7 +79,12 @@ function ChatApp() {
               </span>
             </div>
 
-            <div className="ml-auto flex items-center gap-1">
+            <div className="ml-auto flex items-center gap-2">
+              {/* Ollama middleware settings */}
+              <OllamaSettings config={config} onChange={setConfig} />
+
+              <div className="h-4 w-px bg-border" />
+
               <button
                 onClick={toggle}
                 className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
@@ -70,7 +95,7 @@ function ChatApp() {
             </div>
           </header>
 
-          {/* Thread — min-h-0 lets it shrink so overflow-y-auto inside works */}
+          {/* Thread */}
           <main className="flex min-h-0 flex-1">
             <Thread />
           </main>
