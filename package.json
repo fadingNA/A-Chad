@@ -7,7 +7,9 @@
     "dev": "turbo dev",
     "lint": "turbo lint",
     "format": "turbo format",
-    "typecheck": "turbo typecheck"
+    "typecheck": "turbo typecheck",
+    "docproc": "bash scripts/run-docproc.sh",
+    "stt": "bash scripts/run-stt.sh"
   },
   "devDependencies": {
     "prettier": "^3.8.3",

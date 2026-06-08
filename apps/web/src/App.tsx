@@ -1,15 +1,41 @@
 import { useMemo, useRef, useState } from "react";
-import { AssistantRuntimeProvider, useLocalRuntime } from "@assistant-ui/react";
+import {
+  AssistantRuntimeProvider,
+  useLocalRuntime,
+  useRemoteThreadListRuntime,
+} from "@assistant-ui/react";
 import { ChatSidebar } from "./components/chat-sidebar";
 import { Thread } from "./components/assistant/thread";
 import { OllamaSettings } from "./components/ollama-settings";
 import { createOllamaAdapter, type OllamaConfig } from "./lib/ollama-adapter";
+import { createChatHistoryAdapter } from "./lib/chat-store";
+import { createGatewayModelAdapter } from "./lib/agent-transport/gateway-model-adapter";
+import { createGatewayAttachmentAdapter } from "./lib/attachments/gateway-attachment-adapter";
 import { Sun, Moon, PanelLeft } from "lucide-react";
 import { cn } from "@workspace/ui/lib/utils";
 
+// When enabled (default), chat runs through the self-hosted gateway (apps/api):
+// multi-model agent + server-side file/audio processing. Set VITE_USE_GATEWAY
+// to "false" to fall back to the direct browser→Ollama path.
+const USE_GATEWAY = import.meta.env.VITE_USE_GATEWAY !== "false";
+
+
+/*
+
+Available OLLAMA model list
+NAME                       ID              SIZE      MODIFIED    
+deepseek-r1:latest         6995872bfe4c    5.2 GB    4 weeks ago    
+nemotron3:33b              f6d8b7ff496c    27 GB     5 weeks ago    
+nomic-embed-text:latest    0a109f422b47    274 MB    5 weeks ago    
+gemma4:31b                 6316f0629137    19 GB     6 weeks ago    
+gemma4:latest              c6eb396dbd59    9.6 GB    6 weeks ago    
+qwen3.6:latest             07d35212591f    23 GB     6 weeks ago  
+
+*/
+
 const DEFAULT_CONFIG: OllamaConfig = {
   baseUrl: "http://localhost:11434",
-  model: "llama3.2",
+  model: "nemotron-3-super:latest",
 };
 
 function useTheme() {
@@ -24,7 +50,6 @@ function useTheme() {
 }
 
 function ChatApp() {
-  const [activeChat, setActiveChat] = useState<string>("1");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const { dark, toggle } = useTheme();
 
@@ -34,14 +59,30 @@ function ChatApp() {
   const configRef = useRef(config);
   configRef.current = config;
 
-  const adapter = useMemo(
+  // Model adapter: gateway (multi-model agent + file/audio/vision, via /agent)
+  // or the direct browser→Ollama path. Both run on the LOCAL runtime so chat
+  // history persists per-thread.
+  const ollamaAdapter = useMemo(
     () => createOllamaAdapter(() => configRef.current),
-    // adapter is created once; it reads config via the ref
     // eslint-disable-next-line react-hooks/exhaustive-deps
     []
   );
+  const gatewayAdapter = useMemo(() => createGatewayModelAdapter(), []);
+  const modelAdapter = USE_GATEWAY ? gatewayAdapter : ollamaAdapter;
 
-  const runtime = useLocalRuntime(adapter);
+  // Attachments upload to the gateway; the gateway resolves them at run time.
+  const attachments = useMemo(() => createGatewayAttachmentAdapter(), []);
+
+  // Persisted multi-conversation runtime. The thread list + per-thread message
+  // history are stored via the IndexedDB chat-store adapter, so "new chat"
+  // keeps prior chats and switching reloads their history (and it survives
+  // refresh).
+  const chatHistoryAdapter = useMemo(() => createChatHistoryAdapter(), []);
+  const runtime = useRemoteThreadListRuntime({
+    adapter: chatHistoryAdapter,
+    runtimeHook: () =>
+      useLocalRuntime(modelAdapter, { adapters: { attachments } }),
+  });
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
@@ -53,11 +94,7 @@ function ChatApp() {
             sidebarOpen ? "w-[260px]" : "w-0"
           )}
         >
-          <ChatSidebar
-            activeId={activeChat}
-            onNewChat={() => setActiveChat("")}
-            onSelectChat={setActiveChat}
-          />
+          <ChatSidebar />
         </div>
 
         {/* Main area */}

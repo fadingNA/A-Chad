@@ -1,0 +1,9 @@
+# Keep host build artifacts and platform-specific binaries out of images.
+**/node_modules
+**/dist
+**/.turbo
+.git
+*.log
+.DS_Store
+.claude
+.vscode

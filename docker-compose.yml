@@ -1,0 +1,67 @@
+# A-Chad — full stack in one command.
+#
+#   docker compose up --build
+#
+# Brings up: web (5173) → api gateway (8787) → docproc (8801) + stt (8802).
+# The LLM (Ollama) runs separately on your HOST (not in compose); the gateway
+# reaches it via host.docker.internal. IMPORTANT: start Ollama so it accepts
+# connections from containers:
+#
+#   OLLAMA_HOST=0.0.0.0 ollama serve
+#
+# Override the URL if needed: OLLAMA_URL=http://host.docker.internal:11434/api
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        VITE_API_URL: http://localhost:8787
+        VITE_USE_GATEWAY: "true"
+    ports:
+      - "5173:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    ports:
+      - "8787:8787"
+    environment:
+      PORT: 8787
+      WEB_ORIGIN: http://localhost:5173
+      OLLAMA_URL: ${OLLAMA_URL:-http://host.docker.internal:11434/api}
+      DOCPROC_URL: http://docproc:8801
+      STT_URL: http://stt:8802
+    extra_hosts:
+      # Lets the container reach the host's Ollama (also works on Linux).
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - docproc
+      - stt
+    restart: unless-stopped
+
+  docproc:
+    build: ./services/docproc
+    image: achad-docproc
+    ports:
+      - "8801:8801"
+    restart: unless-stopped
+
+  stt:
+    build: ./services/stt
+    image: achad-stt
+    environment:
+      STT_DEVICE: ${STT_DEVICE:-cpu} # set "cuda" on a GPU host
+    volumes:
+      - hf-cache:/models # persist downloaded MMS weights across restarts
+    ports:
+      - "8802:8802"
+    restart: unless-stopped
+
+volumes:
+  hf-cache:

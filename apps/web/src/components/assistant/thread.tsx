@@ -1,15 +1,18 @@
 import {
   ActionBarPrimitive,
+  AttachmentPrimitive,
   BranchPickerPrimitive,
   ComposerPrimitive,
   MessagePrimitive,
   ThreadPrimitive,
   useEditComposer,
+  useMessage,
 } from "@assistant-ui/react";
 import { MarkdownTextPrimitive } from "@assistant-ui/react-markdown";
 import remarkGfm from "remark-gfm";
 import { makeLightSyntaxHighlighter } from "@assistant-ui/react-syntax-highlighter";
 import atomOneLight from "react-syntax-highlighter/dist/esm/styles/hljs/atom-one-light";
+import atomOneDark from "react-syntax-highlighter/dist/esm/styles/hljs/atom-one-dark";
 import {
   ArrowUp,
   ChevronLeft,
@@ -22,6 +25,7 @@ import {
   ThumbsUp,
   Sparkles,
   Paperclip,
+  X,
 } from "lucide-react";
 import { cn } from "@workspace/ui/lib/utils";
 import {
@@ -32,12 +36,54 @@ import {
   TableHeader,
   TableRow,
 } from "@workspace/ui/components/table";
-import { type ComponentPropsWithoutRef, type ReactNode } from "react";
+import {
+  useEffect,
+  useState,
+  useSyncExternalStore,
+  type ComponentPropsWithoutRef,
+  type ReactNode,
+} from "react";
 
-const SyntaxHighlighter = makeLightSyntaxHighlighter({
+const LightSyntaxHighlighter = makeLightSyntaxHighlighter({
   style: atomOneLight,
   showLineNumbers: true,
 });
+const DarkSyntaxHighlighter = makeLightSyntaxHighlighter({
+  style: atomOneDark,
+  showLineNumbers: true,
+});
+
+/**
+ * Tracks the `dark` class on <html> (toggled by the theme switch in App.tsx)
+ * and re-renders when it changes, so code blocks switch palettes live.
+ */
+function useIsDarkMode() {
+  return useSyncExternalStore(
+    (onChange) => {
+      const observer = new MutationObserver(onChange);
+      observer.observe(document.documentElement, {
+        attributes: true,
+        attributeFilter: ["class"],
+      });
+      return () => observer.disconnect();
+    },
+    () => document.documentElement.classList.contains("dark"),
+    () => false
+  );
+}
+
+/**
+ * react-syntax-highlighter writes the theme's colors as inline styles, so a
+ * single static style can't adapt to dark mode — we pick the matching palette
+ * (atom-one-light / atom-one-dark) based on the active theme instead.
+ */
+function SyntaxHighlighter(
+  props: ComponentPropsWithoutRef<typeof LightSyntaxHighlighter>
+) {
+  const isDark = useIsDarkMode();
+  const Highlighter = isDark ? DarkSyntaxHighlighter : LightSyntaxHighlighter;
+  return <Highlighter {...props} />;
+}
 
 type WithNode = { node?: unknown };
 
@@ -89,7 +135,7 @@ function UserMessage() {
       <div className="flex max-w-[85%] flex-col items-end gap-1">
         {!isEditing ? (
           <>
-            <div className="rounded-2xl bg-[oklch(0.97_0_0)] dark:bg-[oklch(0.269_0_0)] px-4 py-2.5 text-sm">
+            <div className="rounded-2xl bg-[oklch(0.97_0_0)] dark:bg-[oklch(0.269_0_0)] px-4 py-2.5 text-sm empty:hidden">
               <MessagePrimitive.Parts
                 components={{
                   Text: ({ text }) => (
@@ -98,9 +144,15 @@ function UserMessage() {
                 }}
               />
             </div>
+
+            {/* Attached files shown under the query */}
+            <div className="flex flex-wrap justify-end gap-2 empty:hidden">
+              <MessagePrimitive.Attachments
+                components={{ Attachment: MessageAttachment }}
+              />
+            </div>
             <ActionBarPrimitive.Root
               hideWhenRunning
-              autohide="always"
               className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
             >
               <ActionBarPrimitive.Edit asChild>
@@ -136,6 +188,101 @@ function UserMessage() {
   );
 }
 
+function ReasoningPart({
+  text,
+  status,
+}: {
+  text: string;
+  status?: { type?: string };
+}) {
+  const running = status?.type === "running";
+  return (
+    <details
+      open={running}
+      className="my-1.5 rounded-lg border border-border/60 bg-muted/40 text-xs"
+    >
+      <summary className="flex cursor-pointer select-none items-center gap-1.5 px-3 py-1.5 font-medium text-muted-foreground">
+        <span>💭 {running ? "Thinking…" : "Thoughts"}</span>
+        {running && <ProcessingDots />}
+      </summary>
+      <div className="whitespace-pre-wrap px-3 pb-2.5 leading-relaxed text-muted-foreground">
+        {text}
+      </div>
+    </details>
+  );
+}
+
+const PROCESSING_PHRASES = [
+  "Thinking",
+  "Working on it",
+  "Gathering details",
+  "Almost there",
+];
+
+function ProcessingDots() {
+  return (
+    <span className="inline-flex gap-0.5">
+      {[0, 1, 2].map((i) => (
+        <span
+          key={i}
+          className="h-1 w-1 animate-bounce rounded-full bg-current"
+          style={{ animationDelay: `${i * 0.15}s` }}
+        />
+      ))}
+    </span>
+  );
+}
+
+/**
+ * Shows what the agent is doing while a response is pending. Uses the real
+ * server stage when present (e.g. "Transcribing audio…"), otherwise cycles
+ * gentle generic phrases. Hides as soon as the answer starts streaming.
+ */
+function ProcessingIndicator() {
+  const isRunning = useMessage((m) => m.status?.type === "running");
+  const hasContent = useMessage((m) =>
+    m.content.some(
+      (p) =>
+        (p.type === "text" || p.type === "reasoning") &&
+        ((p as { text?: string }).text?.length ?? 0) > 0
+    )
+  );
+  const stage = useMessage(
+    (m) => (m.metadata?.custom?.status as string | undefined) ?? ""
+  );
+  const [phrase, setPhrase] = useState(0);
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    if (stage) return; // a real stage is showing — don't cycle generic phrases
+    const id = setInterval(
+      () => setPhrase((n) => (n + 1) % PROCESSING_PHRASES.length),
+      2200
+    );
+    return () => clearInterval(id);
+  }, [stage]);
+
+  useEffect(() => {
+    if (!isRunning) return;
+    setElapsed(0);
+    const id = setInterval(() => setElapsed((e) => e + 1), 1000);
+    return () => clearInterval(id);
+  }, [isRunning]);
+
+  if (!isRunning || hasContent) return null;
+  const label = stage || PROCESSING_PHRASES[phrase];
+  const clock = `${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, "0")}`;
+  return (
+    <div className="flex min-w-0 items-center gap-2 text-sm text-muted-foreground">
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      <ProcessingDots />
+      {elapsed > 2 && (
+        <span className="shrink-0 tabular-nums text-xs opacity-60">{clock}</span>
+      )}
+    </div>
+  );
+}
+
 function AssistantMessage() {
   return (
     <MessagePrimitive.Root className="group flex w-full gap-3 py-2">
@@ -147,13 +294,13 @@ function AssistantMessage() {
         <div className="text-sm">
           {/* MarkdownContent must be the Text component inside Parts to get part scope */}
           <MessagePrimitive.Parts
-            components={{ Text: MarkdownContent }}
+            components={{ Text: MarkdownContent, Reasoning: ReasoningPart }}
           />
+          <ProcessingIndicator />
         </div>
 
         <ActionBarPrimitive.Root
           hideWhenRunning
-          autohide="not-last"
           className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
         >
           <ActionBarPrimitive.Copy asChild>
@@ -241,10 +388,42 @@ const SUGGESTIONS = [
   { icon: "✨", label: "Brainstorm ideas", prompt: "Give me 5 creative ideas for a side project using TypeScript" },
 ];
 
+function MessageAttachment() {
+  return (
+    <AttachmentPrimitive.Root className="flex items-center gap-1.5 rounded-lg border border-border bg-muted px-2.5 py-1.5 text-xs">
+      <Paperclip className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+      <AttachmentPrimitive.Name className="max-w-[180px] truncate" />
+    </AttachmentPrimitive.Root>
+  );
+}
+
+function ComposerAttachment() {
+  return (
+    <AttachmentPrimitive.Root className="flex items-center gap-1.5 rounded-lg border border-border bg-muted px-2 py-1 text-xs">
+      <Paperclip className="h-3 w-3 shrink-0 text-muted-foreground" />
+      <AttachmentPrimitive.Name className="max-w-[160px] truncate" />
+      <AttachmentPrimitive.Remove asChild>
+        <button
+          type="button"
+          title="Remove attachment"
+          className="rounded p-0.5 text-muted-foreground hover:text-destructive transition-colors"
+        >
+          <X className="h-3 w-3" />
+        </button>
+      </AttachmentPrimitive.Remove>
+    </AttachmentPrimitive.Root>
+  );
+}
+
 function Composer() {
   return (
     <div className="w-full px-4 pb-4 pt-2">
       <ComposerPrimitive.Root className="flex flex-col gap-2 rounded-2xl border border-border bg-background shadow-sm focus-within:border-ring/50 focus-within:ring-1 focus-within:ring-ring/20 transition-all">
+        <ComposerPrimitive.AttachmentDropzone className="relative flex flex-col gap-2 rounded-2xl transition data-[dragging=true]:ring-2 data-[dragging=true]:ring-[oklch(0.65_0.2_30)] data-[dragging=true]:ring-offset-2 data-[dragging=true]:ring-offset-background">
+        <ComposerPrimitive.Attachments
+          components={{ Attachment: ComposerAttachment }}
+          className="flex flex-wrap gap-2 px-3 pt-3 empty:hidden"
+        />
         <ComposerPrimitive.Input
           rows={1}
           autoFocus
@@ -253,13 +432,15 @@ function Composer() {
         />
         <div className="flex items-center justify-between px-3 pb-2.5">
           <div className="flex items-center gap-1">
-            <button
-              type="button"
-              className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-              title="Attach files"
-            >
-              <Paperclip className="h-4 w-4" />
-            </button>
+            <ComposerPrimitive.AddAttachment asChild>
+              <button
+                type="button"
+                className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                title="Attach files (text, PDF, audio, images)"
+              >
+                <Paperclip className="h-4 w-4" />
+              </button>
+            </ComposerPrimitive.AddAttachment>
           </div>
           <div className="flex items-center gap-2">
             <ComposerPrimitive.Cancel asChild>
@@ -283,6 +464,7 @@ function Composer() {
             </ComposerPrimitive.Send>
           </div>
         </div>
+        </ComposerPrimitive.AttachmentDropzone>
       </ComposerPrimitive.Root>
       <p className="mt-2 text-center text-[11px] text-muted-foreground">
         A-Chad can make mistakes. Consider checking important information.
