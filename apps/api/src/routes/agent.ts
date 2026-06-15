@@ -11,11 +11,12 @@ const ORIGIN = process.env.WEB_ORIGIN ?? "http://localhost:5173"
  */
 export async function registerAgentRoute(app: FastifyInstance) {
   app.post("/agent", (req, reply) => {
-    const body = req.body as { messages?: AgentTurn[] }
+    const body = req.body as { messages?: AgentTurn[]; model?: string }
     const turns = (body.messages ?? []).filter(
       (m): m is AgentTurn =>
         !!m && (m.role === "user" || m.role === "assistant") && typeof m.text === "string"
     )
+    const model = typeof body.model === "string" ? body.model : undefined
 
     reply.hijack()
     const res = reply.raw
@@ -25,10 +26,10 @@ export async function registerAgentRoute(app: FastifyInstance) {
       "cache-control": "no-cache, no-transform",
     })
 
-    req.log.info({ turns: turns.length }, "[/agent] request")
+    req.log.info({ turns: turns.length, model }, "[/agent] request")
     void (async () => {
       try {
-        for await (const ev of streamAgentEvents(turns, req.log)) {
+        for await (const ev of streamAgentEvents(turns, req.log, model)) {
           res.write(JSON.stringify(ev) + "\n")
         }
       } catch (err) {

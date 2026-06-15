@@ -7,6 +7,13 @@ apps/api/src/clients/docproc.ts:
     POST /extract  (multipart "file")  ->  { "markdown": ... }
 """
 
+# Use the OS trust store (Windows/macOS/Linux) for TLS so corporate
+# CA-signed certs from TLS-inspection proxies are trusted. Must run before
+# any HTTPS request (e.g. Docling/HuggingFace model downloads).
+import truststore
+
+truststore.inject_into_ssl()
+
 import os
 import tempfile
 

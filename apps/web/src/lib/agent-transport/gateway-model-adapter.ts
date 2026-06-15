@@ -37,13 +37,16 @@ function toTurns(messages: readonly ThreadMessage[]): Turn[] {
   return turns
 }
 
-export function createGatewayModelAdapter(): ChatModelAdapter {
+export function createGatewayModelAdapter(
+  getModel?: () => string | undefined
+): ChatModelAdapter {
   return {
     async *run({ messages, abortSignal }: ChatModelRunOptions) {
+      const model = getModel?.()
       const res = await fetch(`${API_URL}/agent`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ messages: toTurns(messages) }),
+        body: JSON.stringify({ messages: toTurns(messages), model }),
         signal: abortSignal,
       })
       if (!res.ok || !res.body) {

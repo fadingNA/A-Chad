@@ -10,6 +10,12 @@ const OLLAMA_URL = process.env.OLLAMA_URL ?? "http://localhost:11434/api"
 
 const ollama = createOllama({ baseURL: OLLAMA_URL })
 
-export const DEFAULT_MODEL = process.env.DEFAULT_MODEL ?? "gemma4:latest"
+export const DEFAULT_MODEL = process.env.DEFAULT_MODEL ?? "gemma4:26b"
 
 export const defaultModel = ollama(DEFAULT_MODEL)
+
+/** Resolve a model by name, falling back to the default when none is given. */
+export function modelFor(name?: string) {
+  const id = name?.trim() || DEFAULT_MODEL
+  return { id, model: ollama(id) }
+}

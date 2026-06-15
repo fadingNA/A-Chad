@@ -2,3 +2,4 @@ fastapi==0.115.6
 uvicorn[standard]==0.34.0
 docling==2.55.1
 python-multipart==0.0.20
+truststore==0.10.4

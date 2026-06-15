@@ -1,6 +1,6 @@
 import { streamText, stepCountIs, tool, type ModelMessage } from "ai"
 import { z } from "zod"
-import { defaultModel, DEFAULT_MODEL } from "./registry"
+import { modelFor } from "./registry"
 import { resolveAttachmentsForModel, attachmentsInText } from "../attachments/pipeline"
 import { condenseTranscript } from "./summarize"
 
@@ -99,10 +99,12 @@ function promptChars(messages: ModelMessage[]): number {
  */
 export async function* streamAgentEvents(
   turns: AgentTurn[],
-  log: Logger = consoleLogger
+  log: Logger = consoleLogger,
+  modelName?: string
 ): AsyncGenerator<AgentEvent> {
   const t0 = Date.now()
-  log.info({ turns: turns.length }, "start")
+  const { id: modelId, model } = modelFor(modelName)
+  log.info({ turns: turns.length, model: modelId }, "start")
 
   const stage = stageFor(turns)
   if (stage) yield { t: "status", v: stage }
@@ -163,14 +165,14 @@ export async function* streamAgentEvents(
     "prompt ready"
   )
 
-  const modelLabel = DEFAULT_MODEL.replace(/:latest$/, "")
+  const modelLabel = modelId.replace(/:latest$/, "")
   yield {
     t: "status",
     v: isLong ? `Summarizing ~${approxTokens} tokens · ${modelLabel}` : `Thinking · ${modelLabel}`,
   }
 
   const result = streamText({
-    model: defaultModel,
+    model,
     messages: modelMessages,
     tools,
     stopWhen: stepCountIs(5),

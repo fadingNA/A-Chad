@@ -28,6 +28,8 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@workspace/ui/lib/utils";
+import { ModelSelector } from "../model-selector";
+import type { OllamaConfig } from "@/lib/ollama-adapter";
 import {
   Table,
   TableBody,
@@ -415,7 +417,12 @@ function ComposerAttachment() {
   );
 }
 
-function Composer() {
+interface ComposerProps {
+  config: OllamaConfig;
+  onChange: (config: OllamaConfig) => void;
+}
+
+function Composer({ config, onChange }: ComposerProps) {
   return (
     <div className="w-full px-4 pb-4 pt-2">
       <ComposerPrimitive.Root className="flex flex-col gap-2 rounded-2xl border border-border bg-background shadow-sm focus-within:border-ring/50 focus-within:ring-1 focus-within:ring-ring/20 transition-all">
@@ -443,7 +450,9 @@ function Composer() {
             </ComposerPrimitive.AddAttachment>
           </div>
           <div className="flex items-center gap-2">
-            <ComposerPrimitive.Cancel asChild>
+            <ModelSelector config={config} onChange={onChange} />
+
+{/*             <ComposerPrimitive.Cancel asChild>
               <button
                 type="button"
                 className="flex h-8 w-8 items-center justify-center rounded-full bg-foreground text-background hover:opacity-90 transition-opacity"
@@ -452,7 +461,7 @@ function Composer() {
                 <Square className="h-3.5 w-3.5 fill-current" />
               </button>
             </ComposerPrimitive.Cancel>
-
+ */}
             <ComposerPrimitive.Send asChild>
               <button
                 type="button"
@@ -473,7 +482,7 @@ function Composer() {
   );
 }
 
-export function Thread() {
+export function Thread({ config, onChange }: ComposerProps) {
   return (
     <ThreadPrimitive.Root className="flex h-full w-full flex-col bg-background">
       {/* Scrollable messages area — min-h-0 lets it shrink inside the flex parent */}
@@ -492,7 +501,7 @@ export function Thread() {
       {/* Composer pinned at bottom, outside the scroll area */}
       <div className="shrink-0 border-t border-border/40 bg-background/80 backdrop-blur-sm">
         <div className="mx-auto w-full max-w-3xl">
-          <Composer />
+          <Composer config={config} onChange={onChange} />
         </div>
       </div>
     </ThreadPrimitive.Root>

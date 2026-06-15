@@ -3,15 +3,15 @@ import {
   AssistantRuntimeProvider,
   useLocalRuntime,
   useRemoteThreadListRuntime,
+  useThreadListItem,
 } from "@assistant-ui/react";
 import { ChatSidebar } from "./components/chat-sidebar";
 import { Thread } from "./components/assistant/thread";
-import { OllamaSettings } from "./components/ollama-settings";
 import { createOllamaAdapter, type OllamaConfig } from "./lib/ollama-adapter";
 import { createChatHistoryAdapter } from "./lib/chat-store";
 import { createGatewayModelAdapter } from "./lib/agent-transport/gateway-model-adapter";
 import { createGatewayAttachmentAdapter } from "./lib/attachments/gateway-attachment-adapter";
-import { Sun, Moon, PanelLeft } from "lucide-react";
+import { PanelLeft } from "lucide-react";
 import { cn } from "@workspace/ui/lib/utils";
 
 // When enabled (default), chat runs through the self-hosted gateway (apps/api):
@@ -35,8 +35,21 @@ qwen3.6:latest             07d35212591f    23 GB     6 weeks ago
 
 const DEFAULT_CONFIG: OllamaConfig = {
   baseUrl: "http://localhost:11434",
-  model: "nemotron-3-super:latest",
+  model: "gemma4:26b",
 };
+
+/** Shows the active conversation's title at the top-left of the chat area. */
+function ThreadTitle() {
+  const title = useThreadListItem({
+    optional: true,
+    selector: (i) => i.title,
+  });
+  return (
+    <span className="truncate text-sm font-medium text-foreground/80">
+      {title || "New chat"}
+    </span>
+  );
+}
 
 function useTheme() {
   const [dark, setDark] = useState(() =>
@@ -67,7 +80,10 @@ function ChatApp() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     []
   );
-  const gatewayAdapter = useMemo(() => createGatewayModelAdapter(), []);
+  const gatewayAdapter = useMemo(
+    () => createGatewayModelAdapter(() => configRef.current.model),
+    []
+  );
   const modelAdapter = USE_GATEWAY ? gatewayAdapter : ollamaAdapter;
 
   // Attachments upload to the gateway; the gateway resolves them at run time.
@@ -94,47 +110,35 @@ function ChatApp() {
             sidebarOpen ? "w-[260px]" : "w-0"
           )}
         >
-          <ChatSidebar />
+          <ChatSidebar
+            config={config}
+            onConfigChange={setConfig}
+            dark={dark}
+            onToggleTheme={toggle}
+            onToggleSidebar={() => setSidebarOpen((s) => !s)}
+          />
         </div>
 
         {/* Main area */}
-        <div className="flex min-w-0 flex-1 flex-col border-l border-border">
-          {/* Topbar */}
-          <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-3">
-            <button
-              onClick={() => setSidebarOpen((s) => !s)}
-              className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-              title="Toggle sidebar"
-            >
-              <PanelLeft className="h-4 w-4" />
-            </button>
-
-            <div className="flex items-center gap-1.5">
-              <span className="text-sm font-medium">A-Chad</span>
-              <span className="rounded-full border border-[oklch(0.65_0.2_30)/30] bg-[oklch(0.65_0.2_30)/10] px-2 py-0.5 text-[10px] font-medium text-[oklch(0.55_0.2_30)] dark:text-[oklch(0.75_0.2_30)]">
-                Beta
-              </span>
-            </div>
-
-            <div className="ml-auto flex items-center gap-2">
-              {/* Ollama middleware settings */}
-              <OllamaSettings config={config} onChange={setConfig} />
-
-              <div className="h-4 w-px bg-border" />
-
+        <div className="relative flex min-w-0 flex-1 flex-col border-l border-border">
+          {/* Compact title row: shows the active chat name (and a toggle when
+              the sidebar is collapsed) so users know which history is open. */}
+          <div className="flex h-10 shrink-0 items-center gap-2 px-3">
+            {!sidebarOpen && (
               <button
-                onClick={toggle}
+                onClick={() => setSidebarOpen(true)}
                 className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-                title="Toggle theme"
+                title="Open sidebar"
               >
-                {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                <PanelLeft className="h-4 w-4" />
               </button>
-            </div>
-          </header>
+            )}
+            <ThreadTitle />
+          </div>
 
           {/* Thread */}
           <main className="flex min-h-0 flex-1">
-            <Thread />
+            <Thread config={config} onChange={setConfig} />
           </main>
         </div>
       </div>
