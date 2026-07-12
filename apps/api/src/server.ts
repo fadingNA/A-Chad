@@ -11,10 +11,12 @@ import type { ChatRequestBody } from "./protocol"
 const PORT = Number(process.env.PORT ?? 8787)
 const ORIGIN = process.env.WEB_ORIGIN ?? "http://localhost:5173"
 
-const app = Fastify({ logger: true, bodyLimit: 25 * 1024 * 1024 })
+const MAX_FILE_BYTES = 100 * 1024 * 1024 // 100 MB
+
+const app = Fastify({ logger: true, bodyLimit: MAX_FILE_BYTES })
 
 await app.register(cors, { origin: ORIGIN, credentials: true })
-await app.register(multipart, { limits: { fileSize: 25 * 1024 * 1024 } })
+await app.register(multipart, { limits: { fileSize: MAX_FILE_BYTES } })
 await registerAttachmentRoutes(app)
 await registerAgentRoute(app)
 

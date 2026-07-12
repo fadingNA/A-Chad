@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "build": "turbo build",
-    "dev": "turbo dev",
+    "dev": "concurrently --names \"app,docproc,stt\" --prefix-colors \"cyan,green,yellow\" \"turbo dev --ui=stream\" \"bash scripts/run-docproc.sh\" \"bash scripts/run-stt.sh\"",
     "lint": "turbo lint",
     "format": "turbo format",
     "typecheck": "turbo typecheck",
@@ -12,6 +12,7 @@
     "stt": "bash scripts/run-stt.sh"
   },
   "devDependencies": {
+    "concurrently": "^10.0.3",
     "prettier": "^3.8.3",
     "prettier-plugin-tailwindcss": "^0.8.0",
     "turbo": "^2.9.15",
