@@ -6,6 +6,11 @@
 # To force a (re)download, run once with:  ALLOW_DOWNLOAD=1 npm run docproc
 set -euo pipefail
 
+# --- Use the repo-vendored model store by default so the whole stack is
+#     self-contained (zippable, offline). Override with an explicit HF_HOME.
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+export HF_HOME="${HF_HOME:-$REPO_ROOT/models}"
+
 cd "$(dirname "$0")/../services/docproc"
 
 # --- Locate a Python 3.12 interpreter (Docling/torch have no 3.13/3.14 wheels).

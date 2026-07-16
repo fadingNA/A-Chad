@@ -1,8 +1,24 @@
 import { streamText, stepCountIs, tool, type ModelMessage } from "ai"
 import { z } from "zod"
 import { modelFor } from "./registry"
-import { resolveAttachmentsForModel, attachmentsInText } from "../attachments/pipeline"
+import {
+  resolveAttachmentsForModel,
+  attachmentsInText,
+  stripMarkers,
+} from "../attachments/pipeline"
 import { condenseTranscript } from "./summarize"
+import { knowledgeCount, retrieve } from "../rag"
+
+/** Prepended to the retrieved knowledge-base context (RAG). */
+const RAG_SYSTEM =
+  "You are answering questions for an internal team using their private " +
+  "knowledge base. Use the retrieved context below when it is relevant, and " +
+  "cite sources by their name in parentheses. If the answer is not in the " +
+  "context, say so briefly and then answer from your general knowledge.\n\n" +
+  "### Retrieved context\n\n"
+
+/** Whether RAG retrieval is enabled (default on; set RAG_ENABLED=false to skip). */
+const RAG_ENABLED = process.env.RAG_ENABLED !== "false"
 
 /** One conversation turn as sent by the client ChatModelAdapter. */
 export interface AgentTurn {
@@ -109,8 +125,32 @@ export async function* streamAgentEvents(
   const stage = stageFor(turns)
   if (stage) yield { t: "status", v: stage }
 
+  // --- RAG: pull relevant knowledge-base context for the latest question and
+  // inject it as a leading system message. Skipped when the KB is empty or a
+  // retrieval error occurs (chat must never fail because RAG is down).
+  let ragContext = ""
+  if (RAG_ENABLED) {
+    const lastUser = [...turns].reverse().find((t) => t.role === "user")
+    const query = lastUser ? stripMarkers(lastUser.text) : ""
+    if (query) {
+      try {
+        if ((await knowledgeCount()) > 0) {
+          yield { t: "status", v: "Searching knowledge base…" }
+          const { hits, context } = await retrieve(query)
+          ragContext = context
+          log.info({ ragHits: hits.length }, "rag retrieved")
+        }
+      } catch (err) {
+        log.warn({ err: String(err) }, "rag retrieve failed")
+      }
+    }
+  }
+
   const tResolve = Date.now()
   const modelMessages: ModelMessage[] = []
+  if (ragContext) {
+    modelMessages.push({ role: "system", content: RAG_SYSTEM + ragContext })
+  }
   for (const turn of turns) {
     if (turn.role === "assistant") {
       if (turn.text) modelMessages.push({ role: "assistant", content: turn.text })

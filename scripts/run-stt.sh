@@ -7,6 +7,11 @@
 # Force a download anytime with:  ALLOW_DOWNLOAD=1 npm run stt
 set -euo pipefail
 
+# --- Use the repo-vendored model store by default so the whole stack is
+#     self-contained (zippable, offline). Override with an explicit HF_HOME.
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+export HF_HOME="${HF_HOME:-$REPO_ROOT/models}"
+
 cd "$(dirname "$0")/../services/stt"
 
 # librosa needs ffmpeg to decode mp3/m4a/ogg (wav works without it).
@@ -53,6 +58,21 @@ fi
 VENV_PY="$(venv_python)"
 "$VENV_PY" -m pip install -q --upgrade pip
 "$VENV_PY" -m pip install -q -r requirements.txt
+
+# --- Pick a compute device. Production targets an RTX 4090 (cuda/float16), but
+#     CTranslate2 only supports CPU and CUDA — there is no Metal/MPS path. On a
+#     machine with no NVIDIA GPU (e.g. macOS dev) fall back to CPU + int8.
+#     Respect an explicit STT_DEVICE if the caller already set one.
+if [ -z "${STT_DEVICE:-}" ]; then
+  if command -v nvidia-smi >/dev/null 2>&1; then
+    export STT_DEVICE=cuda
+    export STT_COMPUTE_TYPE="${STT_COMPUTE_TYPE:-float16}"
+  else
+    export STT_DEVICE=cpu
+    export STT_COMPUTE_TYPE="${STT_COMPUTE_TYPE:-int8}"
+    echo "[stt] No NVIDIA GPU detected — using CPU (int8). Set STT_DEVICE to override."
+  fi
+fi
 
 # --- Offline only if the faster-whisper weights are already cached; otherwise allow the
 #     one-time download. Force online with ALLOW_DOWNLOAD=1.

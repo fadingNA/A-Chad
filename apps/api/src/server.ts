@@ -6,6 +6,7 @@ import { AssistantStream, DataStreamEncoder } from "assistant-stream"
 import { runAgent } from "./agent/run"
 import { registerAttachmentRoutes } from "./routes/attachments"
 import { registerAgentRoute } from "./routes/agent"
+import { registerKnowledgeRoutes } from "./routes/knowledge"
 import type { ChatRequestBody } from "./protocol"
 
 const PORT = Number(process.env.PORT ?? 8787)
@@ -19,6 +20,7 @@ await app.register(cors, { origin: ORIGIN, credentials: true })
 await app.register(multipart, { limits: { fileSize: MAX_FILE_BYTES } })
 await registerAttachmentRoutes(app)
 await registerAgentRoute(app)
+await registerKnowledgeRoutes(app)
 
 app.get("/health", async () => ({ ok: true }))
 
