@@ -53,11 +53,17 @@ if ! venv_python >/dev/null 2>&1; then
   fi
   echo "Creating venv with: ${PY_CMD[*]}"
   "${PY_CMD[@]}" -m venv .venv
+  FRESH_VENV=1
 fi
 
 VENV_PY="$(venv_python)"
-"$VENV_PY" -m pip install -q --upgrade pip
-"$VENV_PY" -m pip install -q -r requirements.txt
+# Install deps only when the venv is new or a (re)install is explicitly requested
+# (ALLOW_DOWNLOAD=1 or PIP_INSTALL=1). Otherwise skip — an offline machine must
+# not reach PyPI on every launch.
+if [ "${FRESH_VENV:-0}" = "1" ] || [ "${ALLOW_DOWNLOAD:-0}" = "1" ] || [ "${PIP_INSTALL:-0}" = "1" ]; then
+  "$VENV_PY" -m pip install -q --upgrade pip
+  "$VENV_PY" -m pip install -q -r requirements.txt
+fi
 
 # --- Pick a compute device. Production targets an RTX 4090 (cuda/float16), but
 #     CTranslate2 only supports CPU and CUDA — there is no Metal/MPS path. On a

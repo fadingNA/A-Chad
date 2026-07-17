@@ -18,12 +18,31 @@ import os
 import tempfile
 
 from fastapi import FastAPI, File, UploadFile
-from docling.document_converter import DocumentConverter
+from docling.datamodel.base_models import InputFormat
+from docling.datamodel.pipeline_options import EasyOcrOptions, PdfPipelineOptions
+from docling.document_converter import DocumentConverter, PdfFormatOption
 
 app = FastAPI(title="A-Chad DocProc (Docling)")
 
-# Loaded once; first conversion downloads layout/OCR models.
-converter = DocumentConverter()
+# --- OCR models (EasyOCR) are vendored in the repo so PDFs/scans work fully
+# offline. Point Docling at that dir and disable runtime downloads. Override the
+# location with EASYOCR_MODELS. Layout/table models come from HF_HOME (set by
+# scripts/run-docproc.sh).
+_OCR_DIR = os.environ.get(
+    "EASYOCR_MODELS",
+    os.path.join(os.path.dirname(__file__), "..", "..", "models", "easyocr"),
+)
+_pdf_opts = PdfPipelineOptions()
+_pdf_opts.ocr_options = EasyOcrOptions(
+    model_storage_directory=os.path.abspath(_OCR_DIR),
+    download_enabled=False,
+)
+
+# Loaded once. PDFs use the offline-pinned OCR pipeline; other formats
+# (DOCX/PPTX/XLSX/HTML/CSV/MD/…) use Docling defaults.
+converter = DocumentConverter(
+    format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=_pdf_opts)}
+)
 
 
 @app.get("/health")

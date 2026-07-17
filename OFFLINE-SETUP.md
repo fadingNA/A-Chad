@@ -13,6 +13,37 @@ transferred out-of-band.
 
 The **LLM (Ollama)** is not bundled at all — install it separately (see below).
 
+## Offline readiness — what's handled vs. what needs a one-time bootstrap
+
+Runtime is fully offline once set up. The scripts **do not** hit the network on
+normal startup: `HF_HUB_OFFLINE` is set, OCR downloads are disabled, and
+`pip install` is skipped unless the venv is new or `ALLOW_DOWNLOAD=1` /
+`PIP_INSTALL=1` is passed. No CDN/font/analytics calls from the frontend.
+
+| Piece | Offline-ready? | How |
+|---|---|---|
+| HF service models (STT, docling) | ✅ | `models-offline-windows.zip` → `models/hub/` |
+| OCR models (EasyOCR) | ✅ | bundled in `models/easyocr/`, downloads disabled |
+| Embedding model (`nomic-embed-text`) | ✅ | `ollama-nomic-embed-text.zip` |
+| Chat LLM (e.g. gemma4) | ⚠️ transfer separately | `ollama pull` online, or copy the Ollama store |
+| **Node deps (`node_modules`)** | ⚠️ one-time | `npm install` needs a registry — see below |
+| **Python deps (venvs)** | ⚠️ one-time | `pip install` needs a registry/wheels — see below |
+
+**Code dependencies are a supply-chain step, separate from models.** On a truly
+air-gapped machine, `npm install` and the first `pip install` can't reach their
+registries. Options (pick per your environment):
+
+1. **One-time online bootstrap** — on first setup with network access (or via a
+   proxy; `truststore` already trusts the OS/corporate CA), run `npm install`
+   and start each Python service once (which creates the venv + installs). After
+   that, everything runs offline.
+2. **Internal mirror** — point npm/pip at your org's Artifactory/Nexus/PyPI
+   mirror (`.npmrc` registry + `pip config`/`PIP_INDEX_URL`).
+3. **Vendored deps** — transfer a prebuilt `node_modules/` and a Python wheels
+   dir, then `pip install --no-index --find-links <wheels>`. Note: `node_modules`
+   and venvs are **OS/arch-specific** — build them on the same platform as the
+   target (a macOS venv won't run on Windows).
+
 ## What's in the offline bundle
 
 `models-offline-windows.zip` (~3.1 GB) contains the two Python services' models,
@@ -28,6 +59,11 @@ Windows, which normally can't create symlinks):
 Extracts to `A-Chad/models/hub/…`, which is exactly where the run scripts look
 (`HF_HOME` defaults to `<repo>/models`).
 
+It also includes **`models/easyocr/`** — the EasyOCR models Docling uses for OCR
+on PDFs/scans (`craft_mlt_25k.pth` + `latin_g2.pth`, ~94 MB). docproc is pinned
+to this dir with downloads disabled, so PDF text extraction works fully offline
+(override the location with `EASYOCR_MODELS`).
+
 ## Prerequisites (Windows)
 
 - [Git for Windows](https://git-scm.com/download/win) — provides **Git Bash**,
@@ -37,7 +73,26 @@ Extracts to `A-Chad/models/hub/…`, which is exactly where the run scripts look
 - [Ollama](https://ollama.com/download) — for the chat LLM (separate from this bundle)
 - `ffmpeg` on PATH (optional — STT decodes non-`.wav` audio with it)
 
-## Setup steps
+## Quick start (one command)
+
+On a machine **with network access** (or an internal npm/PyPI/Ollama mirror), the
+installer does everything — npm install, Python venvs + pip, all model downloads,
+and the Ollama pulls. Run it in **Git Bash**:
+
+```bash
+git clone <your-repo-url> && cd A-Chad
+bash scripts/setup.sh
+npm run dev
+```
+
+It's idempotent and skips anything already present — so if you've extracted an
+offline model bundle into `./models`, the download steps are skipped
+automatically. Flags: `--skip-deps`, `--skip-models`, `--skip-ollama`,
+`--chat-model <tag>`. For a fully **air-gapped** machine that can't reach the
+registries, follow the manual steps below (using an offline bundle + mirror or
+vendored deps).
+
+## Setup steps (manual / air-gapped)
 
 Run these in **Git Bash** from the machine.
 

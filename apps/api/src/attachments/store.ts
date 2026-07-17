@@ -22,24 +22,27 @@ export interface StoredAttachment {
 
 const TTL_MS = 1000 * 60 * 60 // 1h
 
-/** Classify by MIME / filename into a processing lane. */
+/**
+ * Classify by MIME / filename into a processing lane:
+ *  - image / audio → sent to the vision / STT models
+ *  - text → read inline (cheap; small plaintext-ish formats)
+ *  - document → routed to Docling (Word/PowerPoint/Excel/PDF/HTML/…)
+ *
+ * Falls through to "document" so anything not obviously text/media still gets a
+ * Docling extraction attempt — Docling supports DOCX, PPTX, XLSX, HTML, PDF,
+ * CSV, MD and more, and fails gracefully if it can't parse a file.
+ */
 export function classify(mime: string, name: string): AttachmentKind {
   const ext = name.toLowerCase().split(".").pop() ?? ""
   if (mime.startsWith("image/")) return "image"
   if (mime.startsWith("audio/")) return "audio"
-  if (
-    mime === "application/pdf" ||
-    mime.includes("officedocument") ||
-    mime === "application/msword" ||
-    ["pdf", "docx", "pptx", "doc"].includes(ext)
-  )
-    return "document"
-  if (
-    mime.startsWith("text/") ||
-    ["txt", "md", "markdown", "csv", "json", "log", "yaml", "yml"].includes(ext)
-  )
-    return "text"
-  return "other"
+  // HTML → Docling (extracts readable text, cleaner than raw markup).
+  if (mime === "text/html" || ["html", "htm"].includes(ext)) return "document"
+  // Small text-ish formats read inline — no docproc round-trip.
+  const textExts = ["txt", "md", "markdown", "csv", "tsv", "json", "log", "yaml", "yml"]
+  if (mime.startsWith("text/") || textExts.includes(ext)) return "text"
+  // Everything else (PDF, Word, PowerPoint, Excel, ODF, RTF, …) → Docling.
+  return "document"
 }
 
 const items = new Map<string, StoredAttachment>()

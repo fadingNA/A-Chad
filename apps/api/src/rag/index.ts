@@ -62,9 +62,11 @@ export interface IngestResult {
 
 /** Extract text from a file: plaintext inline, everything else via Docling. */
 async function extractText(input: IngestInput): Promise<string> {
+  // HTML goes to Docling (readable text, not raw markup) — matches the
+  // attachment classifier. Small plaintext formats are read inline.
   const isText =
-    input.mime.startsWith("text/") ||
-    /\.(txt|md|markdown|csv|json|log|ya?ml)$/i.test(input.name)
+    (input.mime.startsWith("text/") && input.mime !== "text/html") ||
+    /\.(txt|md|markdown|csv|tsv|json|log|ya?ml)$/i.test(input.name)
   if (isText) return input.bytes.toString("utf8")
 
   const r = await extractDocument(input.bytes, input.name, input.mime)

@@ -15,14 +15,15 @@ const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8787"
 
 const ACCEPT = [
   "text/*",
-  "application/pdf",
-  ".md",
-  ".markdown",
-  ".csv",
-  ".docx",
-  ".pptx",
-  "audio/*",
   "image/*",
+  "audio/*",
+  "application/pdf",
+  // plaintext-ish
+  ".txt", ".md", ".markdown", ".csv", ".tsv", ".json", ".log", ".yaml", ".yml",
+  // office (Word / PowerPoint / Excel, new + legacy)
+  ".doc", ".docx", ".ppt", ".pptx", ".xls", ".xlsx",
+  // web / open-document / rich text
+  ".html", ".htm", ".rtf", ".odt", ".odp", ".ods",
 ].join(",")
 
 function kindOf(mime: string): PendingAttachment["type"] {

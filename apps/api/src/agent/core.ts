@@ -148,9 +148,6 @@ export async function* streamAgentEvents(
 
   const tResolve = Date.now()
   const modelMessages: ModelMessage[] = []
-  if (ragContext) {
-    modelMessages.push({ role: "system", content: RAG_SYSTEM + ragContext })
-  }
   for (const turn of turns) {
     if (turn.role === "assistant") {
       if (turn.text) modelMessages.push({ role: "assistant", content: turn.text })
@@ -194,8 +191,9 @@ export async function* streamAgentEvents(
     }
   }
 
-  // Size-adaptive model settings.
-  const chars = promptChars(modelMessages)
+  // Size-adaptive model settings (count the RAG system text too, if any).
+  const chars =
+    promptChars(modelMessages) + (ragContext ? RAG_SYSTEM.length + ragContext.length : 0)
   const approxTokens = Math.round(chars / 4)
   const isLong = approxTokens > 3000
   const think = !isLong // reasoning over a huge transcript on CPU stalls
@@ -213,6 +211,9 @@ export async function* streamAgentEvents(
 
   const result = streamText({
     model,
+    // RAG context goes through the dedicated `system` option (not as a message)
+    // — the AI SDK flags in-message system prompts as a prompt-injection risk.
+    ...(ragContext ? { system: RAG_SYSTEM + ragContext } : {}),
     messages: modelMessages,
     tools,
     stopWhen: stepCountIs(5),
