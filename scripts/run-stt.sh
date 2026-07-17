@@ -81,15 +81,17 @@ if [ -z "${STT_DEVICE:-}" ]; then
 fi
 
 # --- Offline only if the faster-whisper weights are already cached; otherwise allow the
-#     one-time download. Force online with ALLOW_DOWNLOAD=1.
+#     one-time download. Force online with ALLOW_DOWNLOAD=1. The repo prefix varies
+#     by model (Systran for large-v3, mobiuslabsgmbh for large-v3-turbo), so match
+#     any repo whose name ends in the configured model.
 HUB="${HF_HOME:-$HOME/.cache/huggingface}/hub"
-MODEL_DIR="models--Systran--faster-whisper-${STT_MODEL:-large-v3}"
-if [ "${ALLOW_DOWNLOAD:-0}" != "1" ] && ls -d "$HUB/$MODEL_DIR" >/dev/null 2>&1; then
+MODEL="${STT_MODEL:-large-v3-turbo}"
+if [ "${ALLOW_DOWNLOAD:-0}" != "1" ] && ls -d "$HUB"/models--*faster-whisper-"$MODEL" >/dev/null 2>&1; then
   export HF_HUB_OFFLINE=1
   export TRANSFORMERS_OFFLINE=1
   echo "stt → http://localhost:8802  (OFFLINE — using cached models)"
 else
-  echo "stt → http://localhost:8802  (ONLINE — first run downloads weights, ~3GB)"
+  echo "stt → http://localhost:8802  (ONLINE — first run downloads weights)"
 fi
 
 mkdir -p logs

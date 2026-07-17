@@ -7,30 +7,20 @@ import {
 } from "@workspace/ui/components/popover";
 import { cn } from "@workspace/ui/lib/utils";
 import { fetchOllamaModels, type OllamaConfig } from "@/lib/ollama-adapter";
+import {
+  describeModel,
+  CATEGORY_ORDER,
+  type ModelDescriptor,
+} from "@/lib/model-catalog";
 
 interface ModelSelectorProps {
   config: OllamaConfig;
   onChange: (config: OllamaConfig) => void;
 }
 
-/** Featured models shown up-front; everything else lives under "More models". */
-const PRIMARY_MODELS = ["gemma4:26b", "gpt-oss:20b", "deepseek-r1:32b"];
-
-/** Business-friendly display names for the featured models. */
-const FRIENDLY_NAMES: Record<string, string> = {
-  "gemma4:26b": "General",
-  "gpt-oss:20b": "Balanced",
-  "deepseek-r1:32b": "Reasoning",
-};
-
-/** Strip the redundant ":latest" tag for display. */
-function label(model: string) {
-  return model.replace(/:latest$/, "");
-}
-
-/** Friendly name when available, otherwise the raw (tag-stripped) model id. */
+/** Friendly title for a model id (used for the compact topbar pill). */
 function displayName(model: string) {
-  return FRIENDLY_NAMES[model] ?? label(model);
+  return describeModel(model).title;
 }
 
 /**
@@ -64,28 +54,40 @@ export function ModelSelector({ config, onChange }: ModelSelectorProps) {
     };
   }, [open, config.baseUrl]);
 
-  // Featured models always appear first (even if not yet pulled); the rest go
-  // under the collapsible "More models" section.
-  const primary = PRIMARY_MODELS.filter(
-    (m) => models.includes(m) || m === config.model
-  );
-  const more = models.filter((m) => !PRIMARY_MODELS.includes(m));
+  // Describe every pulled model and drop non-chat ones (embeddings).
+  const visible = models.map(describeModel).filter((d) => !d.hidden);
 
-  const renderRow = (m: string) => (
+  // Featured section: one representative per category (in CATEGORY_ORDER), plus
+  // the currently selected model. Everything else falls under "More models".
+  const primary: ModelDescriptor[] = [];
+  const selected = visible.find((d) => d.id === config.model);
+  if (selected) primary.push(selected);
+  for (const cat of CATEGORY_ORDER) {
+    const d = visible.find((v) => v.category === cat && !primary.includes(v));
+    if (d) primary.push(d);
+  }
+  const more = visible.filter((d) => !primary.includes(d));
+
+  const renderRow = (d: ModelDescriptor) => (
     <button
-      key={m}
+      key={d.id}
       onClick={() => {
-        onChange({ ...config, model: m });
+        onChange({ ...config, model: d.id });
         setOpen(false);
       }}
       className={cn(
-        "flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-muted",
-        m === config.model && "bg-muted"
+        "flex w-full items-start justify-between gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-muted",
+        d.id === config.model && "bg-muted"
       )}
     >
-      <span className="truncate font-mono">{displayName(m)}</span>
-      {m === config.model && (
-        <Check className="h-3.5 w-3.5 shrink-0 text-green-500" />
+      <span className="min-w-0">
+        <span className="block truncate text-xs font-medium">{d.title}</span>
+        <span className="block truncate text-[11px] text-muted-foreground">
+          {d.description}
+        </span>
+      </span>
+      {d.id === config.model && (
+        <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-green-500" />
       )}
     </button>
   );

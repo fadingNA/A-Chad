@@ -28,18 +28,31 @@ import time
 
 from fastapi import FastAPI, File, Form, UploadFile
 from fastapi.responses import StreamingResponse
-from faster_whisper import WhisperModel
+from faster_whisper import BatchedInferencePipeline, WhisperModel
 
 # --- Config (override via env vars) ---
-MODEL_SIZE    = os.environ.get("STT_MODEL",        "large-v3")
+# large-v3-turbo: multilingual, ~4-8x faster than large-v3 with minimal quality
+# loss. Override with STT_MODEL (e.g. large-v3 for max accuracy, small for speed).
+MODEL_SIZE    = os.environ.get("STT_MODEL",        "large-v3-turbo")
 DEVICE        = os.environ.get("STT_DEVICE",       "cuda")
 COMPUTE_TYPE  = os.environ.get("STT_COMPUTE_TYPE", "float16")  # float16 for 4090
 BEAM_SIZE     = int(os.environ.get("STT_BEAM_SIZE", "5"))
+CPU_THREADS   = int(os.environ.get("STT_CPU_THREADS", "0"))    # 0 = CTranslate2 auto
+BATCH_SIZE    = int(os.environ.get("STT_BATCH_SIZE", "8"))     # batched decode width
 
 app = FastAPI(title="A-Chad STT (faster-whisper)")
 
-print(f"[stt] Loading {MODEL_SIZE} on {DEVICE} ({COMPUTE_TYPE})…", flush=True)
-model = WhisperModel(MODEL_SIZE, device=DEVICE, compute_type=COMPUTE_TYPE)
+print(
+    f"[stt] Loading {MODEL_SIZE} on {DEVICE} ({COMPUTE_TYPE}), "
+    f"beam={BEAM_SIZE} batch={BATCH_SIZE}…",
+    flush=True,
+)
+_base = WhisperModel(
+    MODEL_SIZE, device=DEVICE, compute_type=COMPUTE_TYPE, cpu_threads=CPU_THREADS
+)
+# Batched pipeline: VAD-segments the audio and decodes segments in batches —
+# several× faster than sequential decoding on both CPU and GPU.
+model = BatchedInferencePipeline(model=_base)
 print("[stt] Model ready.", flush=True)
 
 
@@ -71,6 +84,7 @@ async def transcribe_endpoint(
             io.BytesIO(data),
             language=language or None,   # None = auto-detect
             beam_size=BEAM_SIZE,
+            batch_size=BATCH_SIZE,
             vad_filter=True,
             vad_parameters={"min_silence_duration_ms": 500},
             word_timestamps=False,

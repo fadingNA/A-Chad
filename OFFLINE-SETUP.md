@@ -46,15 +46,18 @@ registries. Options (pick per your environment):
 
 ## What's in the offline bundle
 
-`models-offline-windows.zip` (~3.1 GB) contains the two Python services' models,
+`models-offline-windows.zip` (~1.9 GB) contains the two Python services' models,
 laid out as a HuggingFace cache with **no symlinks** (so it extracts cleanly on
 Windows, which normally can't create symlinks):
 
 | Model | Size | Used by |
 |---|---|---|
-| `Systran/faster-whisper-large-v3` | 2.9 GB | audio / speech-to-text (`stt`) |
+| `mobiuslabsgmbh/faster-whisper-large-v3-turbo` | 1.5 GB | audio / speech-to-text (`stt`) — multilingual, ~2–8× faster than large-v3 |
 | `ds4sd/docling-models` | 342 MB | document processing (`docproc`) |
 | `ds4sd/docling-layout-heron` | 164 MB | document processing (`docproc`) |
+
+> For maximum accuracy over speed, set `STT_MODEL=large-v3` (re-download the 2.9 GB
+> model; the run script auto-detects whichever model is cached).
 
 Extracts to `A-Chad/models/hub/…`, which is exactly where the run scripts look
 (`HF_HOME` defaults to `<repo>/models`).

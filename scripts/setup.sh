@@ -31,7 +31,7 @@ cd "$REPO_ROOT"
 SKIP_DEPS=0; SKIP_MODELS=0; SKIP_OLLAMA=0
 CHAT_MODEL="${DEFAULT_MODEL:-gemma4}"
 EMBED_MODEL="${EMBED_MODEL:-nomic-embed-text}"
-STT_MODEL="${STT_MODEL:-large-v3}"
+STT_MODEL="${STT_MODEL:-large-v3-turbo}"
 export HF_HOME="$REPO_ROOT/models"
 EASYOCR_DIR="$REPO_ROOT/models/easyocr"
 
@@ -115,7 +115,7 @@ if [ "$SKIP_MODELS" = "0" ]; then
   STT_PY="$(venv_python "services/stt")"          || die "stt venv missing — run without --skip-deps first."
 
   step "Downloading STT model (faster-whisper: $STT_MODEL) → models/hub"
-  if ls -d "models/hub/models--Systran--faster-whisper-$STT_MODEL" >/dev/null 2>&1; then
+  if ls -d models/hub/models--*faster-whisper-"$STT_MODEL" >/dev/null 2>&1; then
     info "already present — skipping"
   else
     HF_HOME="$HF_HOME" "$STT_PY" - "$STT_MODEL" <<'PY'
